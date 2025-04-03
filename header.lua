@@ -1,3 +1,8 @@
+-- Discipline Priest Rotation
+-- Author: ChefLyfe
+-- Version: 1.0
+-- Description: Advanced Discipline Priest rotation with Atonement management and damage ramping
+
 local plugin = {}
 
 plugin["name"] = "Discipline Priest"
@@ -26,10 +31,10 @@ end
 
 -- Only load for Discipline specialization
 local player_spec_id = core.spell_book.get_specialization_id()
-local discipline_priest = enums.class_spec_id.get_spec_id_from_enum(enums.class_spec_id.spec_enum.DISCIPLINE_PRIEST)
+local discipline_priest_id = 1 -- Discipline spec ID
 
-if player_spec_id ~= discipline_priest then
-    plugin["load"] = true
+if player_spec_id ~= discipline_priest_id then
+    plugin["load"] = false
     return plugin
 end
 
