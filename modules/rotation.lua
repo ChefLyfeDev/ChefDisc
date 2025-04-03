@@ -709,8 +709,8 @@ function rotation.execute_voidweaver_mythic_plus_rotation(local_player, targets_
     end
     
     -- 2. Use Shadow Covenant/Voidwraith to empower damage abilities when needed
-    if menu_elements.enable_shadow_covenant:get_state() and not critical_healing then
-        if utility.cast_shadow_covenant(local_player, menu_elements.enable_shadow_covenant:get_state()) then
+    if menu_elements.enable_mindbender:get_state() and not critical_healing then
+        if utility.cast_mindbender(local_player, menu_elements.enable_mindbender:get_state()) then
             return true
         end
     end

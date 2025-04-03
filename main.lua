@@ -100,12 +100,24 @@ end
 -- Render on-screen elements
 local function my_on_render()
     -- Pass needed data to UI module for rendering
+    local ramp_type = "STANDARD"
+    if ramp.is_ramping then
+        if ramp.is_mini_ramp then
+            ramp_type = "MINI"
+        elseif ramp.is_voidweaver_ramp then
+            ramp_type = "VOIDWEAVER" 
+        elseif ramp.is_voidweaver_mini_ramp then
+            ramp_type = "VOIDWEAVER-MINI"
+        end
+    end
+    
     ui.render_screen(
         ramp.is_ramping,
         ramp.ramp_phase,
         ramp.ramp_start_time,
         ramp.next_big_damage_time,
-        count_atonements_for_ui
+        count_atonements_for_ui,
+        ramp_type
     )
 end
 

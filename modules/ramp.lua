@@ -569,6 +569,11 @@ function ramp.execute_ramp(local_player, heal_targets_list, menu_elements)
         return ramp.execute_voidweaver_mini_ramp(local_player, heal_targets_list, targets_list, menu_elements)
     end
     
+    -- Use Oracle-specific ramping if Oracle spec is selected
+    if menu_elements.oracle_spec and menu_elements.oracle_spec:get_state() then
+        return ramp.execute_oracle_ramp(local_player, heal_targets_list, targets_list, menu_elements)
+    end
+    
     local current_time = core.time()
     local elapsed_time = current_time - ramp.ramp_start_time
     
@@ -591,14 +596,7 @@ function ramp.execute_ramp(local_player, heal_targets_list, menu_elements)
     
     -- Phase 1: Apply shields to as many targets as possible
     if ramp.ramp_phase == 1 then
-        -- Check if we should cast Rapture first (only for full ramps)
-        if not ramp.is_mini_ramp and menu_elements.enable_rapture:get_state() then
-            local rapture_active = utility.cast_rapture(local_player, menu_elements.enable_rapture:get_state())
-            if rapture_active then
-                return true
-            end
-        end
-        
+
         -- Shield as many targets as possible
         for _, target in ipairs(heal_targets_list) do
             if utility.cast_power_word_shield(local_player, target, menu_elements.enable_shield:get_state()) then
@@ -724,6 +722,246 @@ function ramp.execute_ramp(local_player, heal_targets_list, menu_elements)
         
         -- No direct return here - will fall through to normal rotation
         -- with is_ramping still true to prioritize damage
+    end
+    
+    return false
+end
+
+-- Oracle spec ramping implementation based on Wowhead guide
+function ramp.execute_oracle_ramp(local_player, heal_targets_list, targets_list, menu_elements)
+    if not ramp.is_ramping then
+        return false
+    end
+    
+    local current_time = core.time()
+    local elapsed_time = current_time - ramp.ramp_start_time
+    
+    -- Get main damage target
+    local damage_target = nil
+    if #targets_list > 0 and targets_list[1]:is_valid() then
+        damage_target = targets_list[1]
+    end
+    
+    -- Define values for mini vs full ramp
+    local shield_target = ramp.is_mini_ramp and menu_elements.mini_ramp_shield_count:get() or menu_elements.ramp_shield_count:get()
+    local is_raid = menu_elements.raid_mode:get_state()
+    local is_mythic_plus = menu_elements.mythic_plus_mode:get_state()
+    
+    -- Phase 1: Refresh DoT and apply shields (0-3 seconds)
+    if ramp.ramp_phase == 1 then
+        -- Refresh Shadow Word: Pain on main target
+        if damage_target then
+            local dot_refresh_threshold = menu_elements.dot_refresh_threshold:get() * 1000
+            local dot_data = buff_manager:get_debuff_data(damage_target, constants.buff_ids.SHADOW_WORD_PAIN)
+            if not dot_data.is_active or dot_data.remaining < dot_refresh_threshold then
+                if utility.cast_shadow_word_pain(local_player, damage_target, menu_elements.enable_shadow_word_pain:get_state(), dot_refresh_threshold) then
+                    return true
+                end
+            end
+        end
+        
+        -- Apply Power Word: Shield to as many targets as possible
+        for _, target in ipairs(heal_targets_list) do
+            if utility.cast_power_word_shield(local_player, target, menu_elements.enable_shield:get_state()) then
+                ramp.shield_count = ramp.shield_count + 1
+                return true
+            end
+        end
+        
+        -- Apply Renews in raid for Voidweaver Oracle
+        if is_raid and menu_elements.enable_renew and menu_elements.enable_renew:get_state() then
+            for _, target in ipairs(heal_targets_list) do
+                if not utility.has_atonement(target) then
+                    if utility.cast_renew(local_player, target, menu_elements.enable_renew:get_state()) then
+                        return true
+                    end
+                end
+            end
+        end
+        
+        -- Apply Flash Heal to a target without Atonement
+        if is_raid and not ramp.is_mini_ramp then 
+            for _, target in ipairs(heal_targets_list) do
+                if not utility.has_atonement(target) then
+                    if utility.cast_flash_heal(local_player, target, menu_elements.enable_flash_heal:get_state()) then
+                        return true
+                    end
+                    break
+                end
+            end
+        end
+        
+        -- Move to next phase after applying enough shields or 3 seconds
+        if ramp.shield_count >= shield_target or elapsed_time > 3.0 then
+            ramp.ramp_phase = 2
+            ramp.shield_count = 0 -- Reset for tracking
+            return false
+        end
+    
+    -- Phase 2: Cast Power Word: Radiance (3-6 seconds)
+    elseif ramp.ramp_phase == 2 then
+        -- Skip this phase for mini-ramps in M+ for speed
+        if ramp.is_mini_ramp and is_mythic_plus then
+            ramp.ramp_phase = 3
+            return false
+        end
+        
+        -- First Radiance on melee group
+        local melee_target = nil
+        local max_melee_nearby = 0
+        
+        for _, center_target in ipairs(heal_targets_list) do
+            local nearby_count = 0
+            for _, nearby_target in ipairs(heal_targets_list) do
+                if center_target:get_position():dist_to(nearby_target:get_position()) <= 10 then
+                    nearby_count = nearby_count + 1
+                end
+            end
+            
+            if nearby_count > max_melee_nearby then
+                max_melee_nearby = nearby_count
+                melee_target = center_target
+            end
+        end
+        
+        if melee_target and utility.cast_power_word_radiance(
+            local_player, 
+            melee_target, 
+            menu_elements.enable_power_word_radiance:get_state(),
+            heal_targets_list,
+            true) then
+            return true
+        end
+        
+        -- Second Radiance on ranged group if not mini-ramp
+        if not ramp.is_mini_ramp and is_raid then
+            local ranged_target = nil
+            local max_ranged_nearby = 0
+            
+            for _, center_target in ipairs(heal_targets_list) do
+                -- Skip the previous melee target
+                if center_target == melee_target then
+                    goto continue
+                end
+                
+                local nearby_count = 0
+                for _, nearby_target in ipairs(heal_targets_list) do
+                    if center_target:get_position():dist_to(nearby_target:get_position()) <= 20 and 
+                       (not melee_target or nearby_target:get_position():dist_to(melee_target:get_position()) > 12) then
+                        nearby_count = nearby_count + 1
+                    end
+                end
+                
+                if nearby_count > max_ranged_nearby then
+                    max_ranged_nearby = nearby_count
+                    ranged_target = center_target
+                end
+                
+                ::continue::
+            end
+            
+            if ranged_target and utility.cast_power_word_radiance(
+                local_player, 
+                ranged_target, 
+                menu_elements.enable_power_word_radiance:get_state(),
+                heal_targets_list,
+                true) then
+                return true
+            end
+        end
+        
+        -- Move to phase 3 after enough time has passed
+        if elapsed_time > 6.0 then
+            ramp.ramp_phase = 3
+            return false
+        end
+    
+    -- Phase 3: Evangelism and Mindbender (6-8 seconds)
+    elseif ramp.ramp_phase == 3 then
+        -- Count current atonements
+        local atonement_count = utility.count_atonements(heal_targets_list)
+        local min_evangelism_count = ramp.is_mini_ramp and 
+            math.max(2, menu_elements.min_evangelism_count:get() - 2) or 
+            menu_elements.min_evangelism_count:get()
+        
+        -- Cast Evangelism to extend Atonements
+        if atonement_count >= min_evangelism_count then
+            if utility.cast_evangelism(local_player, 
+                                      menu_elements.enable_evangelism:get_state(),
+                                      heal_targets_list,
+                                      true) then
+                -- Apply Spirit Shell if enabled (only for full ramp)
+                if not ramp.is_mini_ramp and menu_elements.enable_spirit_shell:get_state() then
+                    utility.cast_spirit_shell(local_player, menu_elements.enable_spirit_shell:get_state())
+                end
+                
+                -- Use Power Infusion if enabled (only for full ramp)
+                if not ramp.is_mini_ramp and menu_elements.enable_power_infusion:get_state() and 
+                   menu_elements.power_infusion_self:get_state() then
+                    utility.cast_power_infusion(local_player, local_player, menu_elements.enable_power_infusion:get_state())
+                end
+                
+                ramp.ramp_phase = 4
+                return true
+            end
+        end
+        
+        -- Cast Mindbender/Shadowfiend for damage
+        if damage_target and utility.cast_mindbender(local_player, damage_target, menu_elements.enable_mindbender:get_state()) then
+            ramp.ramp_phase = 4
+            return true
+        end
+        
+        -- Move to phase 4 if enough time has passed
+        if elapsed_time > 8.0 then
+            ramp.ramp_phase = 4
+            return false
+        end
+    
+    -- Phase 4: Damage phase
+    elseif ramp.ramp_phase == 4 then
+        if not damage_target then
+            return false
+        end
+        
+        -- Oracle damage priority based on Wowhead guide
+        
+        -- 1. Mind Blast for high priority damage
+        if utility.cast_mind_blast(local_player, damage_target, menu_elements.enable_mind_blast:get_state()) then
+            return true
+        end
+        
+        -- 2. Penance for damage
+        if utility.cast_penance(
+            local_player, damage_target, true, 
+            menu_elements.enable_penance_damage:get_state(),
+            menu_elements.enable_penance_heal:get_state()) then
+            return true
+        end
+        
+        -- 3. Shadow Word: Death in execute range
+        local health_percentage = unit_helper:get_health_percentage(damage_target)
+        if health_percentage < 20 and utility.cast_shadow_word_death(
+            local_player, damage_target, menu_elements.enable_shadow_word_death:get_state()) then
+            return true
+        end
+        
+        -- 4. Mind Games if available
+        if utility.cast_mind_games(local_player, damage_target, menu_elements.enable_mind_games:get_state()) then
+            return true
+        end
+        
+        -- 5. Smite as filler
+        if utility.cast_smite(local_player, damage_target, menu_elements.enable_smite:get_state()) then
+            return true
+        end
+        
+        -- End ramp if damage time reached or maximum duration exceeded
+        local max_duration = ramp.is_mini_ramp and 12.0 or 16.0
+        if current_time >= ramp.next_big_damage_time or elapsed_time > max_duration then
+            ramp.stop_ramping()
+            return false
+        end
     end
     
     return false

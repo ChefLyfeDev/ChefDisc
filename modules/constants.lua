@@ -12,13 +12,12 @@ constants.buff_ids = {
     SHADOW_WORD_PAIN = enums.buff_db.SHADOW_WORD_PAIN, -- Replaced Purge the Wicked
     POWER_OF_THE_DARK_SIDE = enums.buff_db.POWER_OF_THE_DARK_SIDE,
     POWER_WORD_SHIELD = enums.buff_db.POWER_WORD_SHIELD,
-    RAPTURE = 47536, -- Not in buff_db, use direct ID
     POWER_INFUSION = 10060, -- Direct ID
     SPIRIT_SHELL = 109964, -- Direct ID
     
     -- Voidweaver specific buffs
-    VOIDWRAITH = 425251, -- Placeholder ID
-    SHADOW_COVENANT = 314867, -- Placeholder ID
+    VOIDWRAITH = 451234, -- Updated ID
+    -- SHADOW_COVENANT merged into Mindbender
     ENTROPIC_RIFT = 425261, -- Placeholder ID
     RENEW = 139 -- Real ID for Renew
 }
@@ -32,7 +31,7 @@ constants.spell_data = {
         range = 40
     },
     mindbender = {
-        id = 123040,
+        id = 123040, -- Verify this ID is current
         name = "Mindbender",
         range = 40
     },
@@ -43,32 +42,28 @@ constants.spell_data = {
     },
     -- Voidweaver specific spells
     voidwraith = {
-        id = 425250, -- Using a placeholder ID
+        id = 451234,
         name = "Voidwraith",
         range = 40
     },
     ultimate_penitence = {
-        id = 425252, -- Using a placeholder ID
+        id = 421453, -- Using a placeholder ID
         name = "Ultimate Penitence",
         range = 40
     },
-    shadow_covenant = {
-        id = 314867, -- Using a placeholder ID
-        name = "Shadow Covenant",
-        range = 40
-    },
+    -- Shadow Covenant merged into Mindbender
     void_blast = {
-        id = 425255, -- Using a placeholder ID
+        id = 450405, -- Using a placeholder ID
         name = "Void Blast",
         range = 40
     },
     entropic_rift = {
-        id = 425260, -- Using a placeholder ID
+        id = 447444, -- Using a placeholder ID
         name = "Entropic Rift",
         range = 40
     },
     collapsing_void = {
-        id = 425265, -- Using a placeholder ID
+        id = 448403, -- Using a placeholder ID
         name = "Collapsing Void",
         range = 40
     },
@@ -130,11 +125,6 @@ constants.spell_data = {
         id = 10060,
         name = "Power Infusion",
         range = 40
-    },
-    rapture = {
-        id = 47536,
-        name = "Rapture",
-        range = 0
     },
     evangelism = {
         id = 246287,
